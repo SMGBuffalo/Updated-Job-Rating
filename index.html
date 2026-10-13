@@ -1,0 +1,1032 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-slate-950 text-slate-100">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Machine Shop Job Priority & Evaluator App</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- jsPDF & AutoTable for PDF Exporting -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    colors: {
+                        industrial: {
+                            800: '#1e293b',
+                            900: '#0f172a',
+                            950: '#090d16',
+                            card: '#131c2e',
+                            border: '#28354d'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0f172a;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #334155;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #475569;
+        }
+        .glow-green { box-shadow: 0 0 20px -5px rgba(34, 197, 94, 0.35); }
+        .glow-blue { box-shadow: 0 0 20px -5px rgba(56, 189, 248, 0.35); }
+        .glow-amber { box-shadow: 0 0 20px -5px rgba(245, 158, 11, 0.35); }
+        .glow-red { box-shadow: 0 0 20px -5px rgba(239, 68, 68, 0.35); }
+    </style>
+</head>
+<body class="h-full flex flex-col font-sans antialiased bg-slate-950 text-slate-100 overflow-x-hidden">
+
+    <!-- Navigation Header -->
+    <header class="bg-industrial-card border-b border-industrial-border sticky top-0 z-30 shadow-lg">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3.5 flex flex-wrap items-center justify-between gap-3">
+            <div class="flex items-center space-x-3">
+                <div class="p-2.5 bg-gradient-to-tr from-amber-500 to-emerald-500 rounded-xl text-slate-950 shadow-md">
+                    <i class="fa-solid fa-gears text-xl font-black"></i>
+                </div>
+                <div>
+                    <h1 class="text-lg sm:text-xl font-bold tracking-tight text-white flex items-center gap-2">
+                        Machine Shop Job Evaluator
+                        <span class="text-xs px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-mono font-normal">v3.0 PDF Pro</span>
+                    </h1>
+                    <p class="text-xs text-slate-400 hidden sm:block">100-Point Weighted Scoring Matrix & Production Queue</p>
+                </div>
+            </div>
+
+            <div class="flex items-center space-x-2.5">
+                <button onclick="loadSampleJobs()" class="px-3 py-1.5 text-xs font-medium text-slate-300 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg transition duration-150 flex items-center gap-1.5">
+                    <i class="fa-solid fa-vial text-amber-400"></i>
+                    <span>Demo Data</span>
+                </button>
+                <button onclick="exportQueueToPDF()" class="px-3 py-1.5 text-xs font-semibold text-slate-950 bg-gradient-to-r from-emerald-400 to-teal-400 hover:from-emerald-300 hover:to-teal-300 rounded-lg shadow-md transition duration-150 flex items-center gap-1.5">
+                    <i class="fa-solid fa-file-pdf text-slate-950"></i>
+                    <span>Export PDF Queue</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content Layout -->
+    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+
+        <!-- Metrics Overview Strip -->
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div class="bg-industrial-card border border-industrial-border rounded-xl p-4 flex items-center justify-between shadow-md">
+                <div>
+                    <p class="text-xs font-medium text-slate-400 uppercase tracking-wider">Queue Total</p>
+                    <p id="stat-total-jobs" class="text-2xl font-bold text-white font-mono mt-1">0</p>
+                </div>
+                <div class="p-3 bg-slate-800/80 rounded-lg text-slate-400">
+                    <i class="fa-solid fa-list-check text-lg"></i>
+                </div>
+            </div>
+
+            <div class="bg-industrial-card border border-industrial-border rounded-xl p-4 flex items-center justify-between shadow-md">
+                <div>
+                    <p class="text-xs font-medium text-emerald-400 uppercase tracking-wider">Tier A (Hot Jobs)</p>
+                    <p id="stat-tier-a" class="text-2xl font-bold text-emerald-400 font-mono mt-1">0</p>
+                </div>
+                <div class="p-3 bg-emerald-500/10 rounded-lg text-emerald-400">
+                    <i class="fa-solid fa-fire text-lg"></i>
+                </div>
+            </div>
+
+            <div class="bg-industrial-card border border-industrial-border rounded-xl p-4 flex items-center justify-between shadow-md">
+                <div>
+                    <p class="text-xs font-medium text-sky-400 uppercase tracking-wider">Tier B (Standard)</p>
+                    <p id="stat-tier-b" class="text-2xl font-bold text-sky-400 font-mono mt-1">0</p>
+                </div>
+                <div class="p-3 bg-sky-500/10 rounded-lg text-sky-400">
+                    <i class="fa-solid fa-boxes-stacked text-lg"></i>
+                </div>
+            </div>
+
+            <div class="bg-industrial-card border border-industrial-border rounded-xl p-4 flex items-center justify-between shadow-md">
+                <div>
+                    <p class="text-xs font-medium text-amber-400 uppercase tracking-wider">Avg Shop Score</p>
+                    <p id="stat-avg-score" class="text-2xl font-bold text-amber-400 font-mono mt-1">0</p>
+                </div>
+                <div class="p-3 bg-amber-500/10 rounded-lg text-amber-400">
+                    <i class="fa-solid fa-chart-line text-lg"></i>
+                </div>
+            </div>
+        </div>
+
+        <!-- Form and Real-time Gauge Section -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+            <!-- LEFT COLUMN: Evaluation Form (7 Columns) -->
+            <div class="lg:col-span-7 bg-industrial-card border border-industrial-border rounded-xl p-5 shadow-xl space-y-5">
+                <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+                    <div class="flex items-center space-x-2">
+                        <i class="fa-solid fa-sliders text-emerald-400 text-lg"></i>
+                        <h2 class="text-base font-semibold text-white">100-Point Job Rating Matrix</h2>
+                    </div>
+                    <button type="button" onclick="resetForm()" class="text-xs text-slate-400 hover:text-white transition flex items-center gap-1">
+                        <i class="fa-solid fa-rotate-left"></i> Reset
+                    </button>
+                </div>
+
+                <form id="evaluationForm" onsubmit="saveJob(event)" class="space-y-4">
+                    <!-- General Details -->
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-xs font-medium text-slate-300 mb-1">Part Name / Job ID / PO # *</label>
+                            <input type="text" id="jobId" required placeholder="e.g., Aerospace Bracket (PO-99201)" 
+                                   class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-slate-300 mb-1">Customer Account *</label>
+                            <input type="text" id="customerName" required placeholder="e.g., Titanium Aerospace Inc" 
+                                   class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                        </div>
+                    </div>
+
+                    <!-- Factors Matrix Breakdown -->
+                    <div class="space-y-3 pt-2">
+                        <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Evaluation Factors</p>
+
+                        <!-- Factor 1: Profit Margin -->
+                        <div class="bg-slate-900/80 p-2.5 rounded-lg border border-slate-800">
+                            <div class="flex justify-between items-center mb-1">
+                                <label class="text-xs font-medium text-slate-200 flex items-center gap-1.5">
+                                    <i class="fa-solid fa-sack-dollar text-emerald-400"></i> Gross Profit Margin (20 Pts Max)
+                                </label>
+                                <span id="pts-margin" class="text-xs font-mono font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded">20 pts</span>
+                            </div>
+                            <select id="factor-margin" onchange="calculateScore()" class="w-full bg-slate-950 border border-slate-700 rounded px-2.5 py-1.5 text-xs text-slate-100 focus:ring-1 focus:ring-emerald-500 focus:outline-none">
+                                <option value="20" selected>&gt; 50% Profit Margin — Exceptional (+20 pts)</option>
+                                <option value="15">35% – 50% Profit Margin — Strong (+15 pts)</option>
+                                <option value="10">20% – 34% Profit Margin — Acceptable (+10 pts)</option>
+                                <option value="2">&lt; 20% Profit Margin — Thin Margin (+2 pts)</option>
+                            </select>
+                        </div>
+
+                        <!-- Factor 2: Customer Importance -->
+                        <div class="bg-slate-900/80 p-2.5 rounded-lg border border-slate-800">
+                            <div class="flex justify-between items-center mb-1">
+                                <label class="text-xs font-medium text-slate-200 flex items-center gap-1.5">
+                                    <i class="fa-solid fa-user-shield text-indigo-400"></i> Customer Importance (15 Pts Max)
+                                </label>
+                                <span id="pts-customer" class="text-xs font-mono font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded">15 pts</span>
+                            </div>
+                            <select id="factor-customer" onchange="calculateScore()" class="w-full bg-slate-950 border border-slate-700 rounded px-2.5 py-1.5 text-xs text-slate-100 focus:ring-1 focus:ring-emerald-500 focus:outline-none">
+                                <option value="15" selected>Tier 1: Strategic Account / Fast Payer / High Volume (+15 pts)</option>
+                                <option value="10">Tier 2: Regular Repeat Client (+10 pts)</option>
+                                <option value="5">Tier 3: New / One-off Client (+5 pts)</option>
+                                <option value="0">Red Flag: Late Payer / High Friction (+0 pts)</option>
+                            </select>
+                        </div>
+
+                        <!-- Factor 3: Urgency -->
+                        <div class="bg-slate-900/80 p-2.5 rounded-lg border border-slate-800">
+                            <div class="flex justify-between items-center mb-1">
+                                <label class="text-xs font-medium text-slate-200 flex items-center gap-1.5">
+                                    <i class="fa-solid fa-clock text-amber-400"></i> Promised-By Urgency (15 Pts Max)
+                                </label>
+                                <span id="pts-urgency" class="text-xs font-mono font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded">15 pts</span>
+                            </div>
+                            <select id="factor-urgency" onchange="calculateScore()" class="w-full bg-slate-950 border border-slate-700 rounded px-2.5 py-1.5 text-xs text-slate-100 focus:ring-1 focus:ring-emerald-500 focus:outline-none">
+                                <option value="15" selected>Critical / Expedite Fee Paid (+15 pts)</option>
+                                <option value="10">Standard Buffer / Comfortable Target (+10 pts)</option>
+                                <option value="5">Flexible Target Date (+5 pts)</option>
+                                <option value="0">Unrealistic Deadline / Strict Late Penalty (+0 pts)</option>
+                            </select>
+                        </div>
+
+                        <!-- Factor 4: Labor Intensity -->
+                        <div class="bg-slate-900/80 p-2.5 rounded-lg border border-slate-800">
+                            <div class="flex justify-between items-center mb-1">
+                                <label class="text-xs font-medium text-slate-200 flex items-center gap-1.5">
+                                    <i class="fa-solid fa-user-gear text-sky-400"></i> Labor Intensity & Man Hours (10 Pts Max)
+                                </label>
+                                <span id="pts-labor" class="text-xs font-mono font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded">10 pts</span>
+                            </div>
+                            <select id="factor-labor" onchange="calculateScore()" class="w-full bg-slate-950 border border-slate-700 rounded px-2.5 py-1.5 text-xs text-slate-100 focus:ring-1 focus:ring-emerald-500 focus:outline-none">
+                                <option value="10" selected>Lights-Out / Highly Automated (+10 pts)</option>
+                                <option value="7">Balanced Setup & Run Time (+7 pts)</option>
+                                <option value="3">High Manual Labor / Deburr / Heavy Handwork (+3 pts)</option>
+                            </select>
+                        </div>
+
+                        <!-- Factor 5: Material Cost -->
+                        <div class="bg-slate-900/80 p-2.5 rounded-lg border border-slate-800">
+                            <div class="flex justify-between items-center mb-1">
+                                <label class="text-xs font-medium text-slate-200 flex items-center gap-1.5">
+                                    <i class="fa-solid fa-boxes-packing text-teal-400"></i> Material Cost & Outlay (10 Pts Max)
+                                </label>
+                                <span id="pts-material" class="text-xs font-mono font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded">10 pts</span>
+                            </div>
+                            <select id="factor-material" onchange="calculateScore()" class="w-full bg-slate-950 border border-slate-700 rounded px-2.5 py-1.5 text-xs text-slate-100 focus:ring-1 focus:ring-emerald-500 focus:outline-none">
+                                <option value="10" selected>Customer Provided Stock / Low Cost (+10 pts)</option>
+                                <option value="7">Standard Stock Alloy (Alum 6061 / Steel 1018) (+7 pts)</option>
+                                <option value="3">High Outlay / Exotic Alloys / Long Lead (+3 pts)</option>
+                            </select>
+                        </div>
+
+                        <!-- Factor 6: Lead Time Requirement -->
+                        <div class="bg-slate-900/80 p-2.5 rounded-lg border border-slate-800">
+                            <div class="flex justify-between items-center mb-1">
+                                <label class="text-xs font-medium text-slate-200 flex items-center gap-1.5">
+                                    <i class="fa-solid fa-calendar-week text-purple-400"></i> Lead Time Requirement (10 Pts Max)
+                                </label>
+                                <span id="pts-leadtime" class="text-xs font-mono font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded">10 pts</span>
+                            </div>
+                            <select id="factor-leadtime" onchange="calculateScore()" class="w-full bg-slate-950 border border-slate-700 rounded px-2.5 py-1.5 text-xs text-slate-100 focus:ring-1 focus:ring-emerald-500 focus:outline-none">
+                                <option value="10" selected>Balanced Lead Time (&gt; 3 Weeks) (+10 pts)</option>
+                                <option value="6">Moderate Lead Time (1 – 3 Weeks) (+6 pts)</option>
+                                <option value="2">Tight Lead Time (&lt; 1 Week) (+2 pts)</option>
+                            </select>
+                        </div>
+
+                        <!-- Factor 7: Machine Fit & Capacity -->
+                        <div class="bg-slate-900/80 p-2.5 rounded-lg border border-slate-800">
+                            <div class="flex justify-between items-center mb-1">
+                                <label class="text-xs font-medium text-slate-200 flex items-center gap-1.5">
+                                    <i class="fa-solid fa-microchip text-rose-400"></i> Machine Fit & Capacity (10 Pts Max)
+                                </label>
+                                <span id="pts-machine" class="text-xs font-mono font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded">10 pts</span>
+                            </div>
+                            <select id="factor-machine" onchange="calculateScore()" class="w-full bg-slate-950 border border-slate-700 rounded px-2.5 py-1.5 text-xs text-slate-100 focus:ring-1 focus:ring-emerald-500 focus:outline-none">
+                                <option value="10" selected>Fits Under-Utilized Machine (&gt;30% open) (+10 pts)</option>
+                                <option value="6">Fits Standard Machine Queue (+6 pts)</option>
+                                <option value="2">Requires Bottleneck Machine / Outsourcing (+2 pts)</option>
+                            </select>
+                        </div>
+
+                        <!-- Factor 8: Complexity & Scrap Risk -->
+                        <div class="bg-slate-900/80 p-2.5 rounded-lg border border-slate-800">
+                            <div class="flex justify-between items-center mb-1">
+                                <label class="text-xs font-medium text-slate-200 flex items-center gap-1.5">
+                                    <i class="fa-solid fa-triangle-exclamation text-amber-500"></i> Complexity & Scrap Risk (5 Pts Max)
+                                </label>
+                                <span id="pts-complexity" class="text-xs font-mono font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded">5 pts</span>
+                            </div>
+                            <select id="factor-complexity" onchange="calculateScore()" class="w-full bg-slate-950 border border-slate-700 rounded px-2.5 py-1.5 text-xs text-slate-100 focus:ring-1 focus:ring-emerald-500 focus:outline-none">
+                                <option value="5" selected>Low Risk (Standard tolerances ±0.005") (+5 pts)</option>
+                                <option value="3">Moderate Risk (Tight tolerances ±0.001") (+3 pts)</option>
+                                <option value="1">High Scrap Risk (&lt;±0.0002", thin walls) (+1 pt)</option>
+                            </select>
+                        </div>
+
+                        <!-- Factor 9: Repeatability -->
+                        <div class="bg-slate-900/80 p-2.5 rounded-lg border border-slate-800">
+                            <div class="flex justify-between items-center mb-1">
+                                <label class="text-xs font-medium text-slate-200 flex items-center gap-1.5">
+                                    <i class="fa-solid fa-arrows-spin text-cyan-400"></i> Repeatability / Re-order (5 Pts Max)
+                                </label>
+                                <span id="pts-repeat" class="text-xs font-mono font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded">5 pts</span>
+                            </div>
+                            <select id="factor-repeat" onchange="calculateScore()" class="w-full bg-slate-950 border border-slate-700 rounded px-2.5 py-1.5 text-xs text-slate-100 focus:ring-1 focus:ring-emerald-500 focus:outline-none">
+                                <option value="5" selected>High Repeat Potential / Ongoing Production (+5 pts)</option>
+                                <option value="3">Prototype with Path to Production (+3 pts)</option>
+                                <option value="1">One-Off Job / No Repeat Chance (+1 pt)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="pt-2">
+                        <button type="submit" class="w-full py-3 px-4 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-semibold rounded-lg shadow-lg transition duration-200 flex items-center justify-center gap-2">
+                            <i class="fa-solid fa-plus-circle"></i>
+                            <span>Save Job to Production Queue</span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- RIGHT COLUMN: Real-time Score Gauge & Breakdown Chart (5 Columns) -->
+            <div class="lg:col-span-5 space-y-6">
+
+                <!-- Real-time Score Badge Card -->
+                <div id="scoreCard" class="bg-industrial-card border border-industrial-border rounded-xl p-6 shadow-xl transition-all duration-300">
+                    <div class="text-center space-y-3">
+                        <span class="text-xs font-semibold text-slate-400 uppercase tracking-widest">Calculated Job Rating</span>
+                        
+                        <!-- Large Display Number -->
+                        <div class="flex items-baseline justify-center gap-1">
+                            <span id="totalScoreText" class="text-6xl font-black font-mono text-emerald-400 tracking-tight">100</span>
+                            <span class="text-xl font-bold text-slate-500">/ 100</span>
+                        </div>
+
+                        <!-- Progress Bar Gauge -->
+                        <div class="w-full bg-slate-900 rounded-full h-3.5 p-0.5 border border-slate-800 overflow-hidden">
+                            <div id="scoreProgressBar" class="bg-gradient-to-r from-emerald-500 to-teal-400 h-full rounded-full transition-all duration-500" style="width: 100%;"></div>
+                        </div>
+
+                        <!-- Priority Badge -->
+                        <div class="pt-2">
+                            <span id="tierBadge" class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 glow-green">
+                                <i class="fa-solid fa-bolt"></i> Tier A: Hot / Fast Track
+                            </span>
+                        </div>
+
+                        <!-- Operational Recommendation Box -->
+                        <div class="mt-4 p-4 rounded-xl bg-slate-900/90 border border-slate-800 text-left space-y-1.5">
+                            <p class="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                                <i class="fa-solid fa-compass text-amber-400"></i> Operational Recommendation:
+                            </p>
+                            <p id="recommendationText" class="text-xs text-slate-300 leading-relaxed">
+                                High priority job. Allocate immediate spindle time and fast-track tooling/materials. High profit margin and strategic account alignment.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Radar Chart Card -->
+                <div class="bg-industrial-card border border-industrial-border rounded-xl p-5 shadow-xl space-y-3">
+                    <h3 class="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-2">
+                        <i class="fa-solid fa-chart-pie text-sky-400"></i> Score Contribution Radar
+                    </h3>
+                    <div class="relative h-60 w-full flex items-center justify-center">
+                        <canvas id="radarChart"></canvas>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- BOTTOM SECTION: Saved Jobs Queue Table -->
+        <div class="bg-industrial-card border border-industrial-border rounded-xl shadow-xl overflow-hidden">
+            <div class="p-5 border-b border-industrial-border flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                    <h2 class="text-base font-semibold text-white flex items-center gap-2">
+                        <i class="fa-solid fa-list-ol text-emerald-400"></i>
+                        Priority Job Queue
+                    </h2>
+                    <p class="text-xs text-slate-400 mt-0.5">Filter, sort, and export evaluated quotes and job orders</p>
+                </div>
+
+                <!-- Filter Controls -->
+                <div class="flex flex-wrap items-center gap-3">
+                    <div class="relative">
+                        <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-xs text-slate-500"></i>
+                        <input type="text" id="searchInput" oninput="renderTable()" placeholder="Search Part or Customer..." 
+                               class="bg-slate-900 border border-slate-700 text-xs rounded-lg pl-8 pr-3 py-2 text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 w-44 sm:w-60">
+                    </div>
+
+                    <select id="tierFilter" onchange="renderTable()" class="bg-slate-900 border border-slate-700 text-xs rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-1 focus:ring-emerald-500">
+                        <option value="ALL">All Tiers</option>
+                        <option value="Tier A">Tier A (85-100)</option>
+                        <option value="Tier B">Tier B (65-84)</option>
+                        <option value="Tier C">Tier C (45-64)</option>
+                        <option value="Tier D">Tier D (&lt;45)</option>
+                    </select>
+
+                    <button onclick="clearAllJobs()" class="px-3 py-2 text-xs font-medium text-rose-400 hover:text-rose-300 hover:bg-rose-950/40 border border-rose-900/40 rounded-lg transition">
+                        Clear Queue
+                    </button>
+                </div>
+            </div>
+
+            <!-- Table Area -->
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="bg-slate-900/80 text-slate-400 text-xs uppercase font-mono border-b border-industrial-border">
+                            <th class="py-3 px-4">Rank</th>
+                            <th class="py-3 px-4">Part Name / Job ID</th>
+                            <th class="py-3 px-4">Customer</th>
+                            <th class="py-3 px-4">Score</th>
+                            <th class="py-3 px-4">Tier</th>
+                            <th class="py-3 px-4">Margin</th>
+                            <th class="py-3 px-4">Machine Fit</th>
+                            <th class="py-3 px-4 text-right">PDF Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="queueTableBody" class="divide-y divide-slate-800/60 text-xs">
+                        <!-- Rendered dynamically -->
+                    </tbody>
+                </table>
+            </div>
+            
+            <div id="emptyState" class="hidden p-8 text-center text-slate-500 space-y-2">
+                <i class="fa-solid fa-inbox text-3xl"></i>
+                <p class="text-sm font-medium">No saved jobs in the queue.</p>
+                <p class="text-xs text-slate-600">Fill out the calculator above or click 'Demo Data' to load sample quotes.</p>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="border-t border-industrial-border py-4 mt-auto bg-slate-950">
+        <div class="max-w-7xl mx-auto px-4 text-center text-xs text-slate-500">
+            Machine Shop Job Rating & Prioritization System &bull; 100-Point Scoring Matrix with PDF Export
+        </div>
+    </footer>
+
+    <script>
+        // Global State & Definitions
+        let currentScore = 100;
+        let radarChartInstance = null;
+        let savedJobs = [];
+
+        window.addEventListener('DOMContentLoaded', () => {
+            loadJobsFromStorage();
+            if (savedJobs.length === 0) {
+                // Default pre-loaded jobs right out of the box
+                loadSampleJobs();
+            } else {
+                renderTable();
+                updateSummaryCards();
+            }
+            initRadarChart();
+            calculateScore();
+        });
+
+        function calculateScore() {
+            const margin = parseInt(document.getElementById('factor-margin').value);
+            const customer = parseInt(document.getElementById('factor-customer').value);
+            const urgency = parseInt(document.getElementById('factor-urgency').value);
+            const labor = parseInt(document.getElementById('factor-labor').value);
+            const material = parseInt(document.getElementById('factor-material').value);
+            const leadtime = parseInt(document.getElementById('factor-leadtime').value);
+            const machine = parseInt(document.getElementById('factor-machine').value);
+            const complexity = parseInt(document.getElementById('factor-complexity').value);
+            const repeat = parseInt(document.getElementById('factor-repeat').value);
+
+            // Update individual badges
+            document.getElementById('pts-margin').textContent = `${margin} pts`;
+            document.getElementById('pts-customer').textContent = `${customer} pts`;
+            document.getElementById('pts-urgency').textContent = `${urgency} pts`;
+            document.getElementById('pts-labor').textContent = `${labor} pts`;
+            document.getElementById('pts-material').textContent = `${material} pts`;
+            document.getElementById('pts-leadtime').textContent = `${leadtime} pts`;
+            document.getElementById('pts-machine').textContent = `${machine} pts`;
+            document.getElementById('pts-complexity').textContent = `${complexity} pts`;
+            document.getElementById('pts-repeat').textContent = `${repeat} pts`;
+
+            currentScore = margin + customer + urgency + labor + material + leadtime + machine + complexity + repeat;
+
+            // Update Total Score Display
+            document.getElementById('totalScoreText').textContent = currentScore;
+            
+            const progressBar = document.getElementById('scoreProgressBar');
+            progressBar.style.width = `${currentScore}%`;
+
+            // Tier & Badging Logic
+            const tierBadge = document.getElementById('tierBadge');
+            const recommendationText = document.getElementById('recommendationText');
+
+            if (currentScore >= 85) {
+                tierBadge.className = "inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 glow-green";
+                tierBadge.innerHTML = `<i class="fa-solid fa-bolt"></i> Tier A: Hot / Fast Track`;
+                recommendationText.textContent = "High priority job. Allocate immediate spindle time and fast-track tooling/materials. High profit margin and strategic account alignment.";
+                progressBar.className = "bg-gradient-to-r from-emerald-500 to-teal-400 h-full rounded-full transition-all duration-500";
+            } else if (currentScore >= 65) {
+                tierBadge.className = "inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider bg-sky-500/10 text-sky-400 border border-sky-500/30 glow-blue";
+                tierBadge.innerHTML = `<i class="fa-solid fa-check-circle"></i> Tier B: Standard Production`;
+                recommendationText.textContent = "Healthy job order. Schedule into normal production queue. Standard setup and balanced risk-to-profit ratio.";
+                progressBar.className = "bg-gradient-to-r from-sky-500 to-blue-400 h-full rounded-full transition-all duration-500";
+            } else if (currentScore >= 45) {
+                tierBadge.className = "inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider bg-amber-500/10 text-amber-400 border border-amber-500/30 glow-amber";
+                tierBadge.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> Tier C: Fill-In / Low Priority`;
+                recommendationText.textContent = "Run during open machine capacity or gap periods. Consider reviewing material lead times or negotiating longer target dates.";
+                progressBar.className = "bg-gradient-to-r from-amber-500 to-yellow-400 h-full rounded-full transition-all duration-500";
+            } else {
+                tierBadge.className = "inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider bg-rose-500/10 text-rose-400 border border-rose-500/30 glow-red";
+                tierBadge.innerHTML = `<i class="fa-solid fa-hand"></i> Tier D: Review / De-prioritize`;
+                recommendationText.textContent = "Caution: Low rating due to tight margins, bottlenecked equipment, or extreme scrap risk. Re-quote higher to compensate or hold.";
+                progressBar.className = "bg-gradient-to-r from-rose-600 to-red-500 h-full rounded-full transition-all duration-500";
+            }
+
+            updateRadarChart([margin, customer, urgency, labor, material, leadtime, machine, complexity, repeat]);
+        }
+
+        function initRadarChart() {
+            const ctx = document.getElementById('radarChart').getContext('2d');
+            radarChartInstance = new Chart(ctx, {
+                type: 'radar',
+                data: {
+                    labels: ['Margin', 'Customer', 'Urgency', 'Labor', 'Material', 'Lead Time', 'Machine', 'Low Risk', 'Repeat'],
+                    datasets: [{
+                        label: 'Points',
+                        data: [20, 15, 15, 10, 10, 10, 10, 5, 5],
+                        backgroundColor: 'rgba(34, 197, 94, 0.2)',
+                        borderColor: '#22c55e',
+                        borderWidth: 2,
+                        pointBackgroundColor: '#22c55e'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        r: {
+                            angleLines: { color: 'rgba(255, 255, 255, 0.1)' },
+                            grid: { color: 'rgba(255, 255, 255, 0.1)' },
+                            pointLabels: { color: '#94a3b8', font: { size: 9.5 } },
+                            ticks: { display: false },
+                            suggestedMin: 0,
+                            suggestedMax: 20
+                        }
+                    },
+                    plugins: { legend: { display: false } }
+                }
+            });
+        }
+
+        function updateRadarChart(dataPoints) {
+            if (radarChartInstance) {
+                radarChartInstance.data.datasets[0].data = dataPoints;
+                radarChartInstance.update();
+            }
+        }
+
+        function saveJob(e) {
+            e.preventDefault();
+            const jobId = document.getElementById('jobId').value.trim();
+            const customerName = document.getElementById('customerName').value.trim();
+
+            if (!jobId || !customerName) return;
+
+            const marginVal = parseInt(document.getElementById('factor-margin').value);
+            const machineVal = parseInt(document.getElementById('factor-machine').value);
+
+            let marginText = ">50%";
+            if (marginVal === 15) marginText = "35-50%";
+            if (marginVal === 10) marginText = "20-34%";
+            if (marginVal === 2) marginText = "<20%";
+
+            let machineText = "Open Machine";
+            if (machineVal === 6) machineText = "Standard Queue";
+            if (machineVal === 2) machineText = "Bottleneck";
+
+            let tierName = "Tier A";
+            if (currentScore < 85 && currentScore >= 65) tierName = "Tier B";
+            if (currentScore < 65 && currentScore >= 45) tierName = "Tier C";
+            if (currentScore < 45) tierName = "Tier D";
+
+            const newJob = {
+                id: Date.now(),
+                jobId: jobId,
+                customer: customerName,
+                score: currentScore,
+                tier: tierName,
+                margin: marginText,
+                machineFit: machineText,
+                dateAdded: new Date().toLocaleDateString(),
+                details: {
+                    margin: marginVal,
+                    customer: parseInt(document.getElementById('factor-customer').value),
+                    urgency: parseInt(document.getElementById('factor-urgency').value),
+                    labor: parseInt(document.getElementById('factor-labor').value),
+                    material: parseInt(document.getElementById('factor-material').value),
+                    leadtime: parseInt(document.getElementById('factor-leadtime').value),
+                    machine: machineVal,
+                    complexity: parseInt(document.getElementById('factor-complexity').value),
+                    repeat: parseInt(document.getElementById('factor-repeat').value)
+                }
+            };
+
+            savedJobs.unshift(newJob);
+            saveJobsToStorage();
+            renderTable();
+            updateSummaryCards();
+            resetForm();
+        }
+
+        function renderTable() {
+            const tbody = document.getElementById('queueTableBody');
+            const searchVal = document.getElementById('searchInput').value.toLowerCase();
+            const tierVal = document.getElementById('tierFilter').value;
+            const emptyState = document.getElementById('emptyState');
+
+            tbody.innerHTML = '';
+
+            let filteredJobs = savedJobs.filter(job => {
+                const matchesSearch = job.jobId.toLowerCase().includes(searchVal) || job.customer.toLowerCase().includes(searchVal);
+                const matchesTier = tierVal === 'ALL' || job.tier === tierVal;
+                return matchesSearch && matchesTier;
+            });
+
+            filteredJobs.sort((a, b) => b.score - a.score);
+
+            if (filteredJobs.length === 0) {
+                emptyState.classList.remove('hidden');
+            } else {
+                emptyState.classList.add('hidden');
+            }
+
+            filteredJobs.forEach((job, index) => {
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-slate-900/50 transition border-b border-slate-800/40";
+
+                let tierBadgeStyle = "bg-emerald-500/10 text-emerald-400 border-emerald-500/20";
+                if (job.tier === 'Tier B') tierBadgeStyle = "bg-sky-500/10 text-sky-400 border-sky-500/20";
+                if (job.tier === 'Tier C') tierBadgeStyle = "bg-amber-500/10 text-amber-400 border-amber-500/20";
+                if (job.tier === 'Tier D') tierBadgeStyle = "bg-rose-500/10 text-rose-400 border-rose-500/20";
+
+                tr.innerHTML = `
+                    <td class="py-3 px-4 font-mono font-bold text-slate-400">#${index + 1}</td>
+                    <td class="py-3 px-4 font-semibold text-white">${escapeHtml(job.jobId)}</td>
+                    <td class="py-3 px-4 text-slate-300">${escapeHtml(job.customer)}</td>
+                    <td class="py-3 px-4 font-mono font-bold text-base text-white">${job.score}</td>
+                    <td class="py-3 px-4">
+                        <span class="px-2.5 py-1 rounded-full text-xs font-semibold border ${tierBadgeStyle}">
+                            ${job.tier}
+                        </span>
+                    </td>
+                    <td class="py-3 px-4 text-slate-400 font-mono">${job.margin}</td>
+                    <td class="py-3 px-4 text-slate-400">${job.machineFit}</td>
+                    <td class="py-3 px-4 text-right space-x-1">
+                        <button onclick="exportSingleJobPDF(${job.id})" title="Download Single Job Ticket PDF" class="text-xs bg-slate-800 hover:bg-slate-700 text-emerald-400 px-2 py-1 rounded border border-slate-700 transition">
+                            <i class="fa-solid fa-file-pdf"></i> Ticket
+                        </button>
+                        <button onclick="deleteJob(${job.id})" title="Delete Job" class="text-slate-500 hover:text-rose-400 transition px-2 py-1">
+                            <i class="fa-solid fa-trash-can"></i>
+                        </button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function deleteJob(id) {
+            savedJobs = savedJobs.filter(j => j.id !== id);
+            saveJobsToStorage();
+            renderTable();
+            updateSummaryCards();
+        }
+
+        function clearAllJobs() {
+            if (confirm("Are you sure you want to clear all saved jobs from the queue?")) {
+                savedJobs = [];
+                saveJobsToStorage();
+                renderTable();
+                updateSummaryCards();
+            }
+        }
+
+        function updateSummaryCards() {
+            document.getElementById('stat-total-jobs').textContent = savedJobs.length;
+            
+            const tierA = savedJobs.filter(j => j.tier === 'Tier A').length;
+            const tierB = savedJobs.filter(j => j.tier === 'Tier B').length;
+            document.getElementById('stat-tier-a').textContent = tierA;
+            document.getElementById('stat-tier-b').textContent = tierB;
+
+            if (savedJobs.length > 0) {
+                const totalSum = savedJobs.reduce((acc, j) => acc + j.score, 0);
+                document.getElementById('stat-avg-score').textContent = (totalSum / savedJobs.length).toFixed(1);
+            } else {
+                document.getElementById('stat-avg-score').textContent = '0';
+            }
+        }
+
+        function resetForm() {
+            document.getElementById('evaluationForm').reset();
+            calculateScore();
+        }
+
+        function saveJobsToStorage() {
+            localStorage.setItem('machine_shop_queue_pdf_v3', JSON.stringify(savedJobs));
+        }
+
+        function loadJobsFromStorage() {
+            const data = localStorage.getItem('machine_shop_queue_pdf_v3');
+            if (data) {
+                try {
+                    savedJobs = JSON.parse(data);
+                } catch(e) {
+                    savedJobs = [];
+                }
+            }
+        }
+
+        function loadSampleJobs() {
+            savedJobs = [
+                { 
+                    id: 101, 
+                    jobId: 'Aerospace Bracket (PO-99201)', 
+                    customer: 'Titanium Aerospace Inc', 
+                    score: 92, 
+                    tier: 'Tier A', 
+                    margin: '>50%', 
+                    machineFit: 'Open Machine', 
+                    dateAdded: new Date().toLocaleDateString(),
+                    details: { margin: 20, customer: 15, urgency: 15, labor: 10, material: 10, leadtime: 10, machine: 10, complexity: 1, repeat: 1 }
+                },
+                { 
+                    id: 102, 
+                    jobId: 'Hydraulic Shaft (PO-10293)', 
+                    customer: 'Delta Defense Tech', 
+                    score: 88, 
+                    tier: 'Tier A', 
+                    margin: '>50%', 
+                    machineFit: 'Standard Queue', 
+                    dateAdded: new Date().toLocaleDateString(),
+                    details: { margin: 20, customer: 15, urgency: 10, labor: 7, material: 10, leadtime: 10, machine: 6, complexity: 5, repeat: 5 }
+                },
+                { 
+                    id: 103, 
+                    jobId: 'Prototype Manifold (QT-44021)', 
+                    customer: 'Vortex Hydraulics', 
+                    score: 76, 
+                    tier: 'Tier B', 
+                    margin: '35-50%', 
+                    machineFit: 'Standard Queue', 
+                    dateAdded: new Date().toLocaleDateString(),
+                    details: { margin: 15, customer: 10, urgency: 10, labor: 7, material: 7, leadtime: 10, machine: 6, complexity: 3, repeat: 8 }
+                },
+                { 
+                    id: 104, 
+                    jobId: 'Custom Racing Hub (QT-88310)', 
+                    customer: 'Local Racing Gear', 
+                    score: 52, 
+                    tier: 'Tier C', 
+                    margin: '20-34%', 
+                    machineFit: 'Bottleneck', 
+                    dateAdded: new Date().toLocaleDateString(),
+                    details: { margin: 10, customer: 5, urgency: 5, labor: 3, material: 7, leadtime: 6, machine: 2, complexity: 3, repeat: 1 }
+                },
+                { 
+                    id: 105, 
+                    jobId: 'Single Fixture (QT-11029)', 
+                    customer: 'Solo Prototype Shop', 
+                    score: 38, 
+                    tier: 'Tier D', 
+                    margin: '<20%', 
+                    machineFit: 'Bottleneck', 
+                    dateAdded: new Date().toLocaleDateString(),
+                    details: { margin: 2, customer: 5, urgency: 0, labor: 3, material: 3, leadtime: 2, machine: 2, complexity: 1, repeat: 1 }
+                }
+            ];
+            saveJobsToStorage();
+            renderTable();
+            updateSummaryCards();
+        }
+
+        /* Export Entire Queue as a Refined PDF Document Report */
+        function exportQueueToPDF() {
+            if (savedJobs.length === 0) {
+                alert("No jobs in the queue to export!");
+                return;
+            }
+
+            const jsPDFClass = (window.jspdf && window.jspdf.jsPDF) ? window.jspdf.jsPDF : (window.jsPDF || window.jspdf);
+            const doc = new jsPDFClass({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+
+            // Sort jobs by score descending for the report
+            const sortedJobs = [...savedJobs].sort((a, b) => b.score - a.score);
+
+            // PDF Styling Constants
+            const navyDark = [15, 23, 42];
+            const emeraldGreen = [22, 163, 74];
+            const slateGray = [100, 116, 139];
+
+            // Title Masthead Header
+            doc.setFillColor(...navyDark);
+            doc.rect(0, 0, 210, 28, 'F');
+
+            doc.setTextColor(255, 255, 255);
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(16);
+            doc.text("MACHINE SHOP JOB PRIORITY QUEUE REPORT", 14, 12);
+
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(9);
+            doc.setTextColor(226, 232, 240);
+            doc.text("100-Point Weighted Prioritization Matrix System", 14, 18);
+
+            // Metadata Block (Right aligned)
+            const dateStr = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+            doc.setFontSize(8.5);
+            doc.text(`Generated: ${dateStr}`, 196, 12, { align: 'right' });
+            doc.text(`Total Queue Count: ${sortedJobs.length} Jobs`, 196, 18, { align: 'right' });
+
+            // Summary Metric Block
+            let yPos = 35;
+            doc.setDrawColor(226, 232, 240);
+            doc.setFillColor(248, 250, 252);
+            doc.roundedRect(14, yPos, 182, 18, 2, 2, 'FD');
+
+            const tierA_count = sortedJobs.filter(j => j.tier === 'Tier A').length;
+            const tierB_count = sortedJobs.filter(j => j.tier === 'Tier B').length;
+            const avgScore = (sortedJobs.reduce((sum, j) => sum + j.score, 0) / sortedJobs.length).toFixed(1);
+
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(9);
+            doc.setTextColor(15, 23, 42);
+
+            doc.text(`Total Jobs: ${sortedJobs.length}`, 22, yPos + 11);
+            doc.setTextColor(21, 128, 61);
+            doc.text(`Tier A (Hot): ${tierA_count}`, 70, yPos + 11);
+            doc.setTextColor(3, 105, 161);
+            doc.text(`Tier B (Standard): ${tierB_count}`, 118, yPos + 11);
+            doc.setTextColor(180, 83, 9);
+            doc.text(`Avg Score: ${avgScore} / 100`, 162, yPos + 11);
+
+            // Queue Table Generation using AutoTable
+            yPos += 26;
+
+            const tableBody = sortedJobs.map((job, index) => [
+                `#${index + 1}`,
+                job.jobId,
+                job.customer,
+                `${job.score} / 100`,
+                job.tier,
+                job.margin,
+                job.machineFit
+            ]);
+
+            doc.autoTable({
+                startY: yPos,
+                head: [['Rank', 'Part Name / Job ID', 'Customer Account', 'Score', 'Priority Tier', 'Profit Margin', 'Machine Fit']],
+                body: tableBody,
+                theme: 'striped',
+                headStyles: {
+                    fillColor: navyDark,
+                    textColor: [255, 255, 255],
+                    fontStyle: 'bold',
+                    fontSize: 8.5
+                },
+                bodyStyles: {
+                    fontSize: 8.5,
+                    textColor: [51, 65, 85]
+                },
+                columnStyles: {
+                    0: { fontStyle: 'bold', cellWidth: 14 },
+                    1: { fontStyle: 'bold', cellWidth: 45 },
+                    2: { cellWidth: 40 },
+                    3: { fontStyle: 'bold', cellWidth: 20, halign: 'center' },
+                    4: { fontStyle: 'bold', cellWidth: 28 },
+                    5: { cellWidth: 22 },
+                    6: { cellWidth: 23 }
+                },
+                didParseCell: function(data) {
+                    if (data.section === 'body' && data.column.index === 4) {
+                        const val = data.cell.raw;
+                        if (val === 'Tier A') {
+                            data.cell.styles.textColor = [21, 128, 61]; // Green
+                        } else if (val === 'Tier B') {
+                            data.cell.styles.textColor = [3, 105, 161]; // Blue
+                        } else if (val === 'Tier C') {
+                            data.cell.styles.textColor = [180, 83, 9]; // Amber
+                        } else {
+                            data.cell.styles.textColor = [190, 18, 60]; // Red
+                        }
+                    }
+                }
+            });
+
+            // Operating Matrix Rules Summary Box
+            let finalY = doc.lastAutoTable.finalY + 10;
+            
+            if (finalY > 240) {
+                doc.addPage();
+                finalY = 20;
+            }
+
+            doc.setDrawColor(226, 232, 240);
+            doc.setFillColor(248, 250, 252);
+            doc.roundedRect(14, finalY, 182, 32, 2, 2, 'FD');
+
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(9);
+            doc.setTextColor(15, 23, 42);
+            doc.text("Operational Tier Action Guidelines", 18, finalY + 7);
+
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(8);
+            doc.setTextColor(71, 85, 105);
+            doc.text("• Tier A (85-100 pts): Hot / Fast Track — Prioritize setup, expedite tooling, allocate open spindles immediately.", 18, finalY + 13);
+            doc.text("• Tier B (65-84 pts): Standard Production — Normal scheduling queue, balanced margin and labor risk.", 18, finalY + 18);
+            doc.text("• Tier C (45-64 pts): Fill-In / Low Priority — Schedule during open spindle gaps or non-peak machine hours.", 18, finalY + 23);
+            doc.text("• Tier D (<45 pts): Re-quote / Hold — High risk, tight margin or bottlenecked. Quote higher or decline.", 18, finalY + 28);
+
+            // Document Footer
+            const pageCount = doc.internal.getNumberOfPages();
+            for (let i = 1; i <= pageCount; i++) {
+                doc.setPage(i);
+                doc.setFontSize(7.5);
+                doc.setTextColor(148, 163, 184);
+                doc.text("Machine Shop Prioritization System • Confidential Operational Queue Report", 14, 287);
+                doc.text(`Page ${i} of ${pageCount}`, 196, 287, { align: 'right' });
+            }
+
+            doc.save(`Machine_Shop_Priority_Queue_${new Date().toISOString().slice(0,10)}.pdf`);
+        }
+
+        /* Export Individual Job Evaluation Ticket PDF */
+        function exportSingleJobPDF(jobId) {
+            const job = savedJobs.find(j => j.id === jobId);
+            if (!job) return;
+
+            const jsPDFClass = (window.jspdf && window.jspdf.jsPDF) ? window.jspdf.jsPDF : (window.jsPDF || window.jspdf);
+            const doc = new jsPDFClass({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+
+            const navyDark = [15, 23, 42];
+
+            // Header Banner
+            doc.setFillColor(...navyDark);
+            doc.rect(0, 0, 210, 26, 'F');
+
+            doc.setTextColor(255, 255, 255);
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(14);
+            doc.text("MACHINE SHOP JOB RATING TICKET", 14, 12);
+
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(8.5);
+            doc.setTextColor(226, 232, 240);
+            doc.text(`Evaluation Date: ${job.dateAdded}`, 14, 18);
+
+            // Job & Customer Header Card
+            let yPos = 32;
+            doc.setDrawColor(226, 232, 240);
+            doc.setFillColor(248, 250, 252);
+            doc.roundedRect(14, yPos, 182, 24, 2, 2, 'FD');
+
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(11);
+            doc.setTextColor(15, 23, 42);
+            doc.text(`Part / Job ID: ${job.jobId}`, 18, yPos + 9);
+
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(9.5);
+            doc.setTextColor(71, 85, 105);
+            doc.text(`Customer: ${job.customer}`, 18, yPos + 17);
+
+            // Score Badge Box Right Side
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(14);
+            if (job.score >= 85) doc.setTextColor(21, 128, 61);
+            else if (job.score >= 65) doc.setTextColor(3, 105, 161);
+            else if (job.score >= 45) doc.setTextColor(180, 83, 9);
+            else doc.setTextColor(190, 18, 60);
+
+            doc.text(`${job.score} / 100 (${job.tier})`, 190, yPos + 14, { align: 'right' });
+
+            // Factors Breakdown Table
+            yPos += 30;
+            const details = job.details || {};
+
+            const factorRows = [
+                ['Gross Profit Margin', '20 pts', `${details.margin || '-'} pts`],
+                ['Customer Importance', '15 pts', `${details.customer || '-'} pts`],
+                ['Promised-By Date Urgency', '15 pts', `${details.urgency || '-'} pts`],
+                ['Man Hours / Labor Intensity', '10 pts', `${details.labor || '-'} pts`],
+                ['Material Cost & Outlay', '10 pts', `${details.material || '-'} pts`],
+                ['Lead Time Requirement', '10 pts', `${details.leadtime || '-'} pts`],
+                ['Machine Fit & Capacity', '10 pts', `${details.machine || '-'} pts`],
+                ['Complexity & Scrap Risk', '5 pts', `${details.complexity || '-'} pts`],
+                ['Repeatability / Re-order Potential', '5 pts', `${details.repeat || '-'} pts`],
+            ];
+
+            doc.autoTable({
+                startY: yPos,
+                head: [['Scoring Factor', 'Max Weight', 'Earned Points']],
+                body: factorRows,
+                theme: 'grid',
+                headStyles: { fillColor: navyDark, textColor: [255, 255, 255], fontSize: 9 },
+                bodyStyles: { fontSize: 8.5, textColor: [51, 65, 85] },
+                columnStyles: {
+                    0: { fontStyle: 'bold', cellWidth: 100 },
+                    1: { cellWidth: 40, halign: 'center' },
+                    2: { fontStyle: 'bold', cellWidth: 42, halign: 'center' }
+                }
+            });
+
+            // Footer
+            doc.setFontSize(8);
+            doc.setTextColor(148, 163, 184);
+            doc.text("Precision Job Assessment Ticket • Internal Machine Shop Routing Document", 14, 285);
+
+            const safeFilename = job.jobId.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+            doc.save(`Job_Ticket_${safeFilename}.pdf`);
+        }
+
+        function escapeHtml(str) {
+            return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+        }
+    </script>
+</body>
+</html>
